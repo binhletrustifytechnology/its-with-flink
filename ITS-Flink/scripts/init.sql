@@ -1,4 +1,4 @@
-CREATE TABLE traffic_data (
+CREATE TABLE traffic_v2 (
     serial_number     VARCHAR,
     timestamp_seconds BIGINT,
     direction         VARCHAR,

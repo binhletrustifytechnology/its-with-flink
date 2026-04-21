@@ -69,29 +69,32 @@ def _jdbc_url() -> str:
     return f"jdbc:postgresql://{host}:{port}/{db}"
 
 
-def run(csv_path: str) -> None:
+def run() -> None:
     env = StreamExecutionEnvironment.get_execution_environment()
     env.set_runtime_mode(RuntimeExecutionMode.BATCH)
 
     # ── Load JDBC JARs ────────────────────────────────────────────────────────
     lib_dir = Path(__file__).parents[2] / "lib"
-    jar_uris = ";".join(
+    jar_uris = [
         f"file:///{jar.as_posix()}"
         for jar in lib_dir.glob("*.jar")
-    )
+    ]
     if jar_uris:
-        env.add_jars(jar_uris)
+        env.add_jars(*jar_uris)
 
     t_env = StreamTableEnvironment.create(env)
 
-    # ── Source ────────────────────────────────────────────────────────────────
+    pg_user = os.environ.get("PG_USER", "postgres")
+    pg_pass = os.environ.get("PG_PASSWORD", "postgres")
+
+    # ── Source (PostgreSQL via JDBC) ──────────────────────────────────────────
     t_env.execute_sql(f"""
         CREATE TABLE vehicle_source (
             id                         STRING,
             serial_number              STRING,
             message_number             INT,
-            timestamp_seconds_original STRING,
-            timestamp_seconds          BIGINT,
+            timestamp_seconds_original INT,
+            timestamp_seconds          INT,
             direction                  STRING,
             lane                       INT,
             vehicle_class              INT,
@@ -104,22 +107,20 @@ def run(csv_path: str) -> None:
             creation_date              STRING,
             modification_date          STRING
         ) WITH (
-            'connector'              = 'filesystem',
-            'path'                   = '{csv_path}',
-            'format'                 = 'csv',
-            'csv.ignore-parse-errors' = 'true',
-            'csv.null-literal'       = 'NULL'
+            'connector'  = 'jdbc',
+            'url'        = '{_jdbc_url()}',
+            'table-name' = 'vehicle_data',
+            'driver'     = 'org.postgresql.Driver',
+            'username'   = '{pg_user}',
+            'password'   = '{pg_pass}'
         )
     """)
 
     # ── Sink (PostgreSQL via JDBC) ─────────────────────────────────────────────
-    pg_user = os.environ.get("PG_USER", "postgres")
-    pg_pass = os.environ.get("PG_PASSWORD", "postgres")
-
     t_env.execute_sql(f"""
         CREATE TABLE traffic_sink (
             serial_number     STRING,
-            timestamp_seconds BIGINT,
+            timestamp_seconds INT,
             direction         STRING,
             total             INT,
             bicycle           INT,
@@ -137,7 +138,7 @@ def run(csv_path: str) -> None:
         ) WITH (
             'connector'  = 'jdbc',
             'url'        = '{_jdbc_url()}',
-            'table-name' = 'traffic_data',
+            'table-name' = 'traffic_v2',
             'driver'     = 'org.postgresql.Driver',
             'username'   = '{pg_user}',
             'password'   = '{pg_pass}'
@@ -150,6 +151,4 @@ def run(csv_path: str) -> None:
 
 
 if __name__ == "__main__":
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    csv_path = os.path.join(project_root, "resources", "vehicle_data.csv")
-    run(csv_path)
+    run()
