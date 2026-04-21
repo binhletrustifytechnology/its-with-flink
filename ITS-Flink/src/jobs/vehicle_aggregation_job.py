@@ -1,4 +1,8 @@
 import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).parents[2] / ".env")
 
 # Must be set before PyFlink initialises the JVM (Java 17+ module system requires these)
 os.environ.setdefault("JAVA_TOOL_OPTIONS", " ".join([
@@ -58,9 +62,25 @@ def build_aggregation_sql() -> str:
     """
 
 
+def _jdbc_url() -> str:
+    host = os.environ.get("PG_HOST", "localhost")
+    port = os.environ.get("PG_PORT", "5432")
+    db   = os.environ.get("PG_DB",   "its")
+    return f"jdbc:postgresql://{host}:{port}/{db}"
+
+
 def run(csv_path: str) -> None:
     env = StreamExecutionEnvironment.get_execution_environment()
     env.set_runtime_mode(RuntimeExecutionMode.BATCH)
+
+    # ── Load JDBC JARs ────────────────────────────────────────────────────────
+    lib_dir = Path(__file__).parents[2] / "lib"
+    jar_uris = ";".join(
+        f"file:///{jar.as_posix()}"
+        for jar in lib_dir.glob("*.jar")
+    )
+    if jar_uris:
+        env.add_jars(jar_uris)
 
     t_env = StreamTableEnvironment.create(env)
 
@@ -92,8 +112,11 @@ def run(csv_path: str) -> None:
         )
     """)
 
-    # ── Sink (print for now — swap for jdbc/kafka/filesystem in production) ──
-    t_env.execute_sql("""
+    # ── Sink (PostgreSQL via JDBC) ─────────────────────────────────────────────
+    pg_user = os.environ.get("PG_USER", "postgres")
+    pg_pass = os.environ.get("PG_PASSWORD", "postgres")
+
+    t_env.execute_sql(f"""
         CREATE TABLE traffic_sink (
             serial_number     STRING,
             timestamp_seconds BIGINT,
@@ -112,7 +135,12 @@ def run(csv_path: str) -> None:
             long_truck        INT,
             long_truck_speed  DOUBLE
         ) WITH (
-            'connector' = 'print'
+            'connector'  = 'jdbc',
+            'url'        = '{_jdbc_url()}',
+            'table-name' = 'traffic_data',
+            'driver'     = 'org.postgresql.Driver',
+            'username'   = '{pg_user}',
+            'password'   = '{pg_pass}'
         )
     """)
 
