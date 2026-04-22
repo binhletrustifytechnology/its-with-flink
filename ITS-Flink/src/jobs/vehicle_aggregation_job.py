@@ -1,8 +1,4 @@
 import os
-from pathlib import Path
-from dotenv import load_dotenv
-
-load_dotenv(Path(__file__).parents[2] / ".env")
 
 # Must be set before PyFlink initialises the JVM (Java 17+ module system requires these)
 os.environ.setdefault("JAVA_TOOL_OPTIONS", " ".join([
@@ -61,32 +57,26 @@ def build_aggregation_sql() -> str:
 
 def _pg_opts() -> dict:
     return {
-        "host":     os.environ.get("PG_HOST",     "localhost"),
-        "port":     os.environ.get("PG_PORT",     "5432"),
-        "db":       os.environ.get("PG_DB",       "its"),
-        "user":     os.environ.get("PG_USER",     "postgres"),
-        "password": os.environ.get("PG_PASSWORD", "postgres"),
+        "host": os.environ.get("POSTGRES_HOST", "localhost"),
+        "port": os.environ.get("POSTGRES_PORT", "5432"),
+        "db": os.environ.get("POSTGRES_DB", "its"),
+        "user": os.environ.get("POSTGRES_USER", "postgres"),
+        "password": os.environ.get("POSTGRES_PASSWORD", "postgres"),
     }
 
 
 def _kafka_opts() -> dict:
     return {
         "bootstrap_servers": os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
-        "topic":             os.environ.get("KAFKA_TOPIC",             "vehicle_data"),
-        "group_id":          os.environ.get("KAFKA_GROUP_ID",          "vehicle_aggregation_group"),
-        "startup_mode":      os.environ.get("KAFKA_STARTUP_MODE",      "earliest-offset"),
+        "topic": os.environ.get("KAFKA_TOPIC", "topic-sensors"),
+        "group_id": os.environ.get("KAFKA_GROUP_ID", "vehicle_aggregation_group"),
+        "startup_mode": os.environ.get("KAFKA_STARTUP_MODE", "earliest-offset"),
     }
 
 
 def run() -> None:
     env = StreamExecutionEnvironment.get_execution_environment()
     env.set_parallelism(1)
-
-    # ── Load JARs ─────────────────────────────────────────────────────────────
-    lib_dir = Path(__file__).parents[2] / "lib"
-    jar_uris = [f"file:///{jar.as_posix()}" for jar in lib_dir.glob("*.jar")]
-    if jar_uris:
-        env.add_jars(*jar_uris)
 
     t_env = StreamTableEnvironment.create(env)
 
