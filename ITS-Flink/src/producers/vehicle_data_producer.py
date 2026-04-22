@@ -85,6 +85,7 @@ def produce(csv_path: str, delay: float) -> None:
             sent += 1
             print(f"[{sent:>4}] sent → serial={message.get('serial_number')} "
                   f"ts={message.get('timestamp_seconds')} "
+                  f"message_number={message.get('message_number')} "
                   f"class={message.get('vehicle_class')} "
                   f"volume={message.get('vehicle_volume')}")
 
@@ -101,14 +102,16 @@ def produce(csv_path: str, delay: float) -> None:
 if __name__ == "__main__":
     project_root = Path(__file__).parents[2]
 
-    parser = argparse.ArgumentParser(description="Publish vehicle_data.csv to Kafka")
+    file_name = 'data-2026-02-22.csv'
+
+    parser = argparse.ArgumentParser(description=f"Publish {file_name} to Kafka")
     parser.add_argument(
         "--delay", type=float, default=0.1,
         help="Seconds between messages (default: 0.1)",
     )
     parser.add_argument(
         "--csv", type=str,
-        default=str(project_root / "resources" / "vehicle_data.csv"),
+        default=str(project_root / "resources" / f"{file_name}"),
         help="Path to CSV file",
     )
     args = parser.parse_args()

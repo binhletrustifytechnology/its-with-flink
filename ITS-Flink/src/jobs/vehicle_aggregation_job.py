@@ -50,7 +50,12 @@ def build_aggregation_sql() -> str:
     return f"""
         SELECT
         {cols}
-        FROM vehicle_source
+        FROM (
+            SELECT *,
+                ROW_NUMBER() OVER (PARTITION BY serial_number, timestamp_seconds, message_number ORDER BY proc_time DESC) AS row_num
+            FROM vehicle_source
+        )
+        WHERE row_num = 1
         GROUP BY serial_number, timestamp_seconds
     """
 
@@ -70,7 +75,7 @@ def _kafka_opts() -> dict:
         "bootstrap_servers": os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"),
         "topic":             os.environ.get("KAFKA_TOPIC",             "topic-sensors-2"),
         "group_id":          os.environ.get("KAFKA_GROUP_ID",          "vehicle_aggregation_group"),
-        "startup_mode":      os.environ.get("KAFKA_STARTUP_MODE",      "earliest-offset"),
+        "startup_mode":      os.environ.get("KAFKA_STARTUP_MODE",      "latest-offset"),
     }
 
 
@@ -104,6 +109,7 @@ t_env.execute_sql(f"""
         gap                        DOUBLE,
         creation_date              STRING,
         modification_date          STRING,
+        proc_time  AS PROCTIME(),
         event_time AS TO_TIMESTAMP_LTZ(CAST(timestamp_seconds AS BIGINT) * 1000, 3),
         WATERMARK FOR event_time AS event_time - INTERVAL '10' SECOND
     ) WITH (
@@ -154,7 +160,3 @@ statement_set.add_insert_sql(f"INSERT INTO traffic_sink {agg_sql}")
 
 # ── 6) Launch ─────────────────────────────────────────────────────────────────
 statement_set.execute()
-
-#
-# if __name__ == "__main__":
-#     run()
