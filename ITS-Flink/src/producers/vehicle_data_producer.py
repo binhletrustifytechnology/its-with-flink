@@ -102,11 +102,11 @@ def produce(csv_path: str, delay: float) -> None:
 if __name__ == "__main__":
     project_root = Path(__file__).parents[2]
 
-    file_name = 'data-1776848658945.csv'
+    file_name = 'data-2026-02-22.csv'
 
     parser = argparse.ArgumentParser(description=f"Publish {file_name} to Kafka")
     parser.add_argument(
-        "--delay", type=float, default=0.1,
+        "--delay", type=float, default=0.001,
         help="Seconds between messages (default: 0.1)",
     )
     parser.add_argument(
