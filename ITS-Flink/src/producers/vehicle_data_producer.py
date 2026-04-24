@@ -102,7 +102,7 @@ def produce(csv_path: str, delay: float) -> None:
 if __name__ == "__main__":
     project_root = Path(__file__).parents[2]
 
-    file_name = 'data-2026-02-22.csv'
+    file_name = 'data-1776848658945.csv'
 
     parser = argparse.ArgumentParser(description=f"Publish {file_name} to Kafka")
     parser.add_argument(

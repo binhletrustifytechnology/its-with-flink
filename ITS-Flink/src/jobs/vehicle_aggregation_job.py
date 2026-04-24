@@ -1,16 +1,9 @@
 import os
 
-# Must be set before PyFlink initialises the JVM (Java 17+ module system requires these)
-os.environ.setdefault("JAVA_TOOL_OPTIONS", " ".join([
-    "--add-opens=java.base/java.util=ALL-UNNAMED",
-    "--add-opens=java.base/java.lang=ALL-UNNAMED",
-    "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
-    "--add-opens=java.base/java.io=ALL-UNNAMED",
-    "--add-opens=java.base/java.nio=ALL-UNNAMED",
-    "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
-]))
-
 from pyflink.datastream import StreamExecutionEnvironment
+from pyflink.datastream.checkpointing_mode import CheckpointingMode
+from pyflink.datastream.state_backend import EmbeddedRocksDBStateBackend
+from pyflink.datastream.checkpoint_storage import FileSystemCheckpointStorage
 from pyflink.table import StreamTableEnvironment, EnvironmentSettings
 
 VEHICLE_CLASS_MAP = {
@@ -85,6 +78,24 @@ env.set_parallelism(1)
 settings = EnvironmentSettings.in_streaming_mode()
 t_env = StreamTableEnvironment.create(env, environment_settings=settings)
 
+CHECKPOINT_DIR = os.getenv(
+    "FLINK_CHECKPOINT_DIR",
+    "file:///opt/flink/checkpoints"   # adjust to any writable local path
+)
+
+# ── Apply the chosen backend ──────────────────────────────────────────────────
+_rocksdb_backend = EmbeddedRocksDBStateBackend()
+env.set_state_backend(_rocksdb_backend)
+env.get_checkpoint_config().set_checkpoint_storage(
+    FileSystemCheckpointStorage(CHECKPOINT_DIR)
+)
+# Checkpointing: every 30 s, exactly-once, 3 retained checkpoints
+env.enable_checkpointing(30_000, CheckpointingMode.EXACTLY_ONCE)
+env.get_checkpoint_config().set_min_pause_between_checkpoints(5_000)
+env.get_checkpoint_config().set_checkpoint_timeout(60_000)
+env.get_checkpoint_config().set_max_concurrent_checkpoints(1)
+env.get_checkpoint_config().set_tolerable_checkpoint_failure_number(3)
+
 pg = _pg_opts()
 kafka = _kafka_opts()
 jdbc_url = f"jdbc:postgresql://{pg['host']}:{pg['port']}/{pg['db']}"
@@ -93,7 +104,6 @@ jdbc_url = f"jdbc:postgresql://{pg['host']}:{pg['port']}/{pg['db']}"
 # event_time converts timestamp_seconds (Unix s) to TIMESTAMP_LTZ for watermarking
 t_env.execute_sql(f"""
     CREATE TABLE vehicle_source (
-        id                         STRING,
         serial_number              STRING,
         message_number             INT,
         timestamp_seconds_original INT,
